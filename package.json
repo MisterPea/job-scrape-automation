@@ -1,0 +1,23 @@
+{
+  "name": "job-scrape-automation",
+  "version": "0.0.1",
+  "description": "Job search and scrape automation--interfacing Google Custom SearchLLMs and AppleScript automation",
+  "license": "MIT",
+  "author": "Perry Angelora",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
+    "fast-csv": "^5.0.5"
+  }
+}
