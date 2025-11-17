@@ -14,7 +14,7 @@ export function loadConfig(): AppConfig {
   return {
     searchApiKey: process.env.SEARCH_API_KEY,
     searchIdCx: process.env.SEARCH_ID_CX,
-    timePeriod: 'd2',
+    timePeriod: 'd1',
     sortBy:'date',
   };
 }
