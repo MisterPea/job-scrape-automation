@@ -20,4 +20,5 @@ CREATE TABLE
     text_content TEXT,
     is_graded TEXT DEFAULT 'not_graded',
     fit REAL DEFAULT 0.0
+    vectors TEXT,
   )

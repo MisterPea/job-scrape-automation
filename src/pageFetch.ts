@@ -52,13 +52,15 @@ export class PageFetch {
     const dom = new JSDOM(fullHtml, { url: link, virtualConsole });
     const reader = new Readability(dom.window.document, { charThreshold: 0 });
     const article = reader.parse();
-    console.log(article);
+
     if (!article) {
+      // If Moz/Readability fails, we log the error and move on.
       await this.db.setData(`UPDATE discovered_jobs SET status='parsed_error' WHERE id=? AND link=?`, [id, link]);
       const errorObj = [{ date: currentDatetime(), location: "pageFetch_parse", error: `Couldn't parse link:${link}` }];
       writeCsv('errors.csv', errorObj);
       console.warn(`ERROR: Couldn't parse link:${link}`);
     } else {
+      // If Moz/Readability parses, we add text_content to db
       await this.db.setData(`UPDATE discovered_jobs SET status='parsed' WHERE id=? AND link=?`, [id, link]);
       this.db.setData(`
         INSERT OR IGNORE INTO parsed_jobs (link, text_content, is_graded)

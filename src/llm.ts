@@ -1,41 +1,118 @@
-import { pipeline } from '@xenova/transformers';
+import writeCsv from './csvControl';
+import currentDatetime from './helpers/getDate';
+import { resumeText } from './data/resumeText';
 
-let embedderPromise: Promise<any> | null = null;
+export class ResumeJobClassifier {
+  classifier: any;
 
-async function getEmbedder() {
-  if (!embedderPromise) {
-    embedderPromise = (async () => {
-      // You can swap to a better embedding model, e.g. a BGE/GTE port when available.
-      const pipe = await pipeline(
-        'feature-extraction',
-        'Xenova/all-MiniLM-L6-v2' // small & decent for similarity
-      );
-
-      // Wrap with pooling + normalization
-      return async (input: string | string[]) => {
-        const output = await pipe(input, {
-          pooling: 'mean',
-          normalize: true,
-        });
-        // Ensure always returns an array of vectors
-        return Array.isArray(input) ? output : [output];
-      };
-    })();
+  constructor(public db: any) {
+    this.classifier = null;
+    this.db = db;
   }
-  return embedderPromise;
-}
 
-async function embedTexts(texts: string[]): Promise<number[][]> {
-  const embed = await getEmbedder();
-  return embed!(texts);
-}
-
-function cosineSim(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
+  private async getNextJobDescription() {
+    const result = await this.db.getData(`
+      UPDATE parsed_jobs
+      SET is_graded='graded'
+      WHERE text_content = (
+        SELECT text_content FROM parsed_jobs
+        WHERE is_graded='not_graded'
+        LIMIT 1
+      )
+        RETURNING *
+      `);
+    if (!result) {
+      console.log('No pending jobs found');
+      return false;
+    }
+    return result;
   }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+
+  private normalizeJobText(raw: string): string {
+    return raw
+      .replace(/\r\n/g, '\n')           // Windows → Unix newlines
+      .replace(/[•·►▪]/g, '\n• ')       // convert common bullets into a line break + bullet
+      .replace(/\n{2,}/g, '\n\n')       // collapse extra blank lines
+      .replace(/[ \t]+/g, ' ')          // collapse spaces/tabs
+      .replace(/\s(\s{1,})/g, '')         // remove extra spaces
+      .trim();
+  }
+
+  private createMicroChunks(text: string): string[] {
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const segments: string[] = [];
+
+    for (const line of lines) {
+      if (line.length > 400) {
+        const sentences = line
+          .split(/(?<=[.!?])\s+/) // "end-of-sentence punctuation + space"
+          .map(s => s.trim())
+          .filter(Boolean);
+        segments.push(...sentences);
+      } else {
+        segments.push(line);
+      }
+    }
+    return segments;
+  }
+
+  // convenience method to count number of words
+  private wordCount(str: string): number {
+    return str.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  // Method to create overlapping chunks from smaller chunks
+  private createChunks(text: string, maxWords = 220, minWords = 80, overlapWords = 40): string[] {
+    const norm = this.normalizeJobText(text);
+    const microChunks = this.createMicroChunks(norm);
+
+    const chunks: string[] = [];
+    let buffer: string[] = [];
+    let bufferWords = 0;
+
+    // reset count/buffer
+    const flushBuffer = () => {
+      if (!buffer.length) return;
+      chunks.push(buffer.join(' ').trim());
+      buffer = [];
+      bufferWords = 0;
+    };
+
+    for (const segment of microChunks) {
+      const numSegmentWords = this.wordCount(segment);
+
+      if (bufferWords + numSegmentWords > maxWords && bufferWords >= minWords) {
+        flushBuffer();
+
+
+        // start next chunk with overlap
+        if (chunks.length > 0 && overlapWords > 0) {
+          const lastChunk = chunks[chunks.length - 1];
+          const words = lastChunk.split(/\s+/).filter(Boolean);
+          const overlap = words.slice(-overlapWords).join(' ');
+          if (overlap) {
+            buffer.push(overlap);
+            bufferWords = this.wordCount(overlap);
+          }
+        }
+      }
+      buffer.push(segment);
+      bufferWords += numSegmentWords;
+    }
+    flushBuffer();
+    return chunks;
+  }
+
+  async gradeFit() {
+    const currJob = await this.getNextJobDescription();
+    if (!currJob) return;
+
+    const { id, link, text_content } = currJob;
+    const chunks = this.createChunks(text_content);
+    console.log(chunks);
+  }
 }
