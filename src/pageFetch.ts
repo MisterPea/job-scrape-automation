@@ -14,13 +14,14 @@ export class PageFetch {
     const result = await this.db.getData(`
       UPDATE discovered_jobs
       SET status='running'
-      WHERE link = (
-        SELECT link FROM discovered_jobs
+      WHERE id = (
+        SELECT id FROM discovered_jobs
         WHERE status='pending'
+        ORDER BY id
         LIMIT 1
       )
-        RETURNING *
-      `);
+      RETURNING *
+    `);
 
     if (!result) {
       console.log('No pending jobs found');

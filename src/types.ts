@@ -23,3 +23,9 @@ export interface SanitizedSearchResult {
   link: string,
   snippet: string,
 }
+
+export type ChunkMatch = {
+  jobIndex: number;
+  resumeIndex: number;
+  similarity: number;
+};
