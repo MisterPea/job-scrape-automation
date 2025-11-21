@@ -42,49 +42,54 @@ export class PageFetch {
       userAgent: "Unartful-Labs/1.0 (+contact: unartfully@gmail.com)"
     });
 
-    await page.goto(link, { waitUntil: 'networkidle0' });
-    const fullHtml = await page.content();
+    try {
+      console.info(`Page fetch - Visiting: ${link}`);
+      await page.goto(link, { waitUntil: 'networkidle0' });
+      const fullHtml = await page.content();
 
-    await browser.close();
+      await browser.close();
 
-    const virtualConsole = new VirtualConsole();
-    virtualConsole.off;
+      const virtualConsole = new VirtualConsole();
+      virtualConsole.off;
 
-    const dom = new JSDOM(fullHtml, { url: link, virtualConsole });
-    const reader = new Readability(dom.window.document, { charThreshold: 0 });
-    const article = reader.parse();
+      console.info(`Page fetch - Parsing: ${link}`);
+      const dom = new JSDOM(fullHtml, { url: link, virtualConsole });
+      const reader = new Readability(dom.window.document, { charThreshold: 0, disableJSONLD: true });
 
-    if (!article) {
-      // If Moz/Readability fails, we log the error and move on.
-      await this.db.setData(`UPDATE discovered_jobs SET status='parsed_error' WHERE id=? AND link=?`, [id, link]);
-      const errorObj = [{ date: currentDatetime(), location: "pageFetch_parse", error: `Couldn't parse link:${link}` }];
-      writeCsv('errors.csv', errorObj);
-      console.warn(`ERROR: Couldn't parse link:${link}`);
-    } else {
-      // If Moz/Readability parses, we add text_content to db
-      await this.db.setData(`UPDATE discovered_jobs SET status='parsed' WHERE id=? AND link=?`, [id, link]);
-      this.db.setData(`
+      const article = reader.parse();
+      console.log(article);
+
+      if (!article) {
+        // If Moz/Readability fails, we log the error and move on.
+        await this.db.setData(`UPDATE discovered_jobs SET status='parsed_error' WHERE id=? AND link=?`, [id, link]);
+        const errorObj = [{ date: currentDatetime(), location: "pageFetch_parse", error: `Couldn't parse link:${link}` }];
+        writeCsv('errors.csv', errorObj);
+        console.warn(`ERROR: Couldn't parse link:${link}`);
+      } else {
+        // If Moz/Readability parses, we add text_content to db
+        await this.db.setData(`UPDATE discovered_jobs SET status='parsed' WHERE id=? AND link=?`, [id, link]);
+        this.db.setData(`
         INSERT OR IGNORE INTO parsed_jobs (link, text_content, is_graded)
         VALUES (?, ?, ?)`,
-        [link, article.textContent, 'not_graded']
-      );
+          [link, article.textContent, 'not_graded']
+        );
+      }
+    } catch (err) {
+      const errorObj = [{ date: currentDatetime(), location: 'pageFetch-general', error: err, url: link, retries: null }];
+      writeCsv('errors.csv', errorObj);
+      await this.db.setData(`UPDATE discovered_jobs SET status='failed' WHERE id=? AND link=?`, [id, link]);
+      await browser.close();
     }
 
     // recursive call till all are done
-    this.getPageData();
+    await this.getPageData();
   }
 
-  async resetTags() {
-    await this.db.getData(`
+  async resetRunningTags() {
+    await this.db.setData(`
       UPDATE discovered_jobs
       SET status='pending'
-      WHERE link = (
-        SELECT link FROM discovered_jobs
-        WHERE id=51
-        LIMIT 1
-      )
-      RETURNING *
-      `);
-
+      WHERE status='running'
+      `, []);
   }
 }

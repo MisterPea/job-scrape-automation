@@ -22,7 +22,7 @@ export default function writeCsv(fileName: string, records: Array<Object>) {
 
   // Pipe it BEFORE writing rows
   formatter.pipe(writeStream).on('finish', () => {
-    console.log('Finished writing CSV');
+    console.log(`Record added to ${fileName}`);
   });
 
   // Write all rows through the formatter

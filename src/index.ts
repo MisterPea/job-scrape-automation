@@ -19,11 +19,11 @@ async function main() {
   // Visit each site, pull the site content and write to db
   await pf.getPageData();
 
-  // Reset tags
-  // pf.resetTags()
-
   // Grade fit
-  rjc.gradeFit();
+  await rjc.gradeFit();
+
+  // Reset tags
+  // pf.resetRunningTags()
 }
 
 function embedResume() {
@@ -47,9 +47,9 @@ async function reRunStalledGrading() {
     SET is_graded='not_graded'
     WHERE is_graded='in_progress'
   `, []);
-  await rjc.gradeFit()
-
+  await rjc.gradeFit();
 }
+
 
 // reRunStalledGrading()
 // resetGrade()
