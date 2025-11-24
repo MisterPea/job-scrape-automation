@@ -57,7 +57,6 @@ export class PageFetch {
       const reader = new Readability(dom.window.document, { charThreshold: 0, disableJSONLD: true });
 
       const article = reader.parse();
-      console.log(article);
 
       if (!article) {
         // If Moz/Readability fails, we log the error and move on.
@@ -67,11 +66,12 @@ export class PageFetch {
         console.warn(`ERROR: Couldn't parse link:${link}`);
       } else {
         // If Moz/Readability parses, we add text_content to db
+        const { title, textContent, excerpt, siteName } = article;
         await this.db.setData(`UPDATE discovered_jobs SET status='parsed' WHERE id=? AND link=?`, [id, link]);
         this.db.setData(`
-        INSERT OR IGNORE INTO parsed_jobs (link, text_content, is_graded)
-        VALUES (?, ?, ?)`,
-          [link, article.textContent, 'not_graded']
+        INSERT OR IGNORE INTO parsed_jobs (link, title, excerpt, site_name, text_content)
+        VALUES (?, ?, ?, ?, ? )`,
+          [link, title, excerpt, siteName, textContent]
         );
       }
     } catch (err) {

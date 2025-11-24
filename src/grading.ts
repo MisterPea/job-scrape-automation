@@ -1,5 +1,6 @@
 import { cosineSimilarity, embedTexts } from './vectorEmbeddings';
 import { ChunkMatch } from './types';
+import { ResumeChunkElement } from './data/resumeText';
 
 export class ResumeJobClassifier {
   classifier: any;
@@ -12,10 +13,10 @@ export class ResumeJobClassifier {
   private async getNextJobDescription() {
     const result = await this.db.getData(`
       UPDATE parsed_jobs
-      SET is_graded='in_progress'
+      SET is_graded_whole='in_progress', is_graded_summary='in_progress'
       WHERE id = (
         SELECT id FROM parsed_jobs
-        WHERE is_graded='not_graded'
+        WHERE is_graded_whole='not_graded' AND is_graded_summary='not_graded'
         ORDER BY id
         LIMIT 1
       )
@@ -34,7 +35,7 @@ export class ResumeJobClassifier {
       .replace(/[•·►▪]/g, '\n• ')       // convert common bullets into a line break + bullet
       .replace(/\n{2,}/g, '\n\n')       // collapse extra blank lines
       .replace(/[ \t]+/g, ' ')          // collapse spaces/tabs
-      .replace(/\s(\s{1,})/g, '')         // remove extra spaces
+      .replace(/\s(\s{1,})/g, '')       // remove extra spaces
       .trim();
     return norm;
   }
@@ -68,8 +69,10 @@ export class ResumeJobClassifier {
   }
 
   // Method to create overlapping chunks from smaller chunks
-  private createChunks(text: string, maxWords = 220, minWords = 80, overlapWords = 40): string[] {
-    const norm = this.normalizeJobText(text);
+  private createChunks(text_content: string, title: string | null, excerpt: string | null, site_name: string | null, maxWords = 220, minWords = 80, overlapWords = 40): string[] {
+    const concatenatedInput = `${title ? 'Title:' + title : ''} ${excerpt ? 'Excerpt:' + excerpt : ''} ${site_name ? 'Site Name:' + site_name : ''} Text Content:${text_content}`;
+
+    const norm = this.normalizeJobText(concatenatedInput);
     const microChunks = this.createMicroChunks(norm);
 
     const chunks: string[] = [];
@@ -108,18 +111,18 @@ export class ResumeJobClassifier {
     return chunks;
   }
 
-  async embedResume(resumeText: string[]) {
+  async embedResume(resumeText: ResumeChunkElement[]) {
     console.info('Initiate resume embed');
     // Clear old data
     await this.db.setData(`DELETE FROM resume_embeddings`, []);
 
-    const embeddings = await embedTexts(resumeText);
-    const sqlValues = embeddings.map((embed, i) => [resumeText[i], JSON.stringify(embed)]);
+    const embeddings = await embedTexts(resumeText.map((s) => s.text));
+    const sqlValues = embeddings.map((embed, i) => [resumeText[i].id, resumeText[i].type, resumeText[i].text, JSON.stringify(embed)]);
 
     try {
       await this.db.insertData(`
-        INSERT INTO resume_embeddings (res_text, embedding)
-        VALUES (?, ?)`,
+        INSERT INTO resume_embeddings (id, type, text, embedding)
+        VALUES (?, ?, ?, ?)`,
         sqlValues
       );
       console.info(`Resume successfully embedded`);
@@ -165,30 +168,46 @@ export class ResumeJobClassifier {
     return embeddings.map(({ embedding }: any) => JSON.parse(embedding));
   }
 
+  private async getResumeSummaryEmbeddings(): Promise<number[][]> {
+    const embeddings = await this.db.getAllData(`SELECT embedding FROM resume_summary`);
+    return embeddings.map(({ embedding }: any) => JSON.parse(embedding));
+  }
+
   /**
-   * Trunk method to coordinate the grading of job fit and
-   * the updating of the db with the results
+   * Trunk method to coordinate the grading of job fit as 
+   * compared to the whole resume, as well as the updating 
+   * of the db with the results
    * @returns 
    */
   async gradeFit() {
+    const resumeEmbeddings = await this.getResumeEmbeddings();
+    const summaryEmbeddings = await this.getResumeSummaryEmbeddings();
+
+    if (!resumeEmbeddings.length || !summaryEmbeddings.length) {
+      console.error('No resume or resume summary embedded');
+      return;
+    }
+
     const currJob = await this.getNextJobDescription();
     if (!currJob) return;
 
-    const { id, link, text_content } = currJob;
+    const { id, link, text_content, title, excerpt, site_name } = currJob;
 
-    const chunks = this.createChunks(text_content);
+    const chunks = this.createChunks(text_content, title, excerpt, site_name);
 
     const jobEmbeddings = await embedTexts(chunks);
-    const resumeEmbeddings = await this.getResumeEmbeddings();
 
-    const matchRtn = this.matchJobToResume(jobEmbeddings, resumeEmbeddings);
-    const fitScore = this.overallFitScore(matchRtn);
+    const wholeResRtn = this.matchJobToResume(jobEmbeddings, resumeEmbeddings);
+    const wholeFitScore = this.overallFitScore(wholeResRtn);
+
+    const summaryResRtn = this.matchJobToResume(jobEmbeddings, summaryEmbeddings);
+    const summaryFitScore = this.overallFitScore(summaryResRtn);
 
     await this.db.setData(`
       UPDATE parsed_jobs 
-      SET is_graded = 'graded', fit = ?
-      WHERE id = ? AND link= ?`, [fitScore, id, link]);
-    console.info(`Graded link: ${link.substring(0, 60 - 3)}...`);
+      SET is_graded_whole = 'graded', resume_fit = ?, summary_fit = ? 
+      WHERE id = ? AND link= ?`, [wholeFitScore, summaryFitScore, id, link]);
+    console.info(`Whole resume - graded link: ${link.substring(0, 60 - 3)}...`);
 
     // Recursive call to grade next job
     await this.gradeFit();

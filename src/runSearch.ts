@@ -44,6 +44,11 @@ export class Search {
     console.info(`Preparing search results`);
     const { keys, vals } = this.db.prepareObjectsForInsert(this.searchItems);
 
+    if (!vals.length) {
+      console.info('No search results');
+      return;
+    }
+    
     try {
       await this.db.insertData(`
         INSERT OR IGNORE INTO discovered_jobs (${keys.join(', ')})
