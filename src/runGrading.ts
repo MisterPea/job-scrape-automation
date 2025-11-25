@@ -10,25 +10,43 @@ export class ResumeJobClassifier {
     this.db = db;
   }
 
-  private async getNextJobDescription() {
+  /**
+   * Private method to retrieve the next row in order of id
+   * @returns {Object|boolean} Return is the row data as an object or false if data not present
+   */
+  private async getNextJobDescription(): Promise<Record<string, any> | false> {
     const result = await this.db.getData(`
-      UPDATE parsed_jobs
-      SET is_graded_whole='in_progress', is_graded_summary='in_progress'
+      UPDATE discovered_jobs
+      SET is_graded='in_progress'
       WHERE id = (
-        SELECT id FROM parsed_jobs
-        WHERE is_graded_whole='not_graded' AND is_graded_summary='not_graded'
+        SELECT id FROM discovered_jobs
+        WHERE is_graded='not_graded'
         ORDER BY id
         LIMIT 1
       )
       RETURNING *
     `);
     if (!result) {
-      console.log('No pending jobs found');
+      console.log('No pending grading jobs found');
       return false;
     }
     return result;
   }
 
+  /**
+   * Convenience method to count number of words in a string
+   * @param {string} str String to be counted
+   * @returns {number} number of words that comprise the input string
+   */
+  private wordCount(str: string): number {
+    return str.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  /**
+   * Private method that normalizes text strings into a repeatable pattern
+   * @param {string} raw Raw text string to be normalized
+   * @returns {string} Return is a normalized text string
+   */
   private normalizeJobText(raw: string): string {
     const norm = raw
       .replace(/\r\n/g, '\n')           // Windows → Unix newlines
@@ -40,7 +58,11 @@ export class ResumeJobClassifier {
     return norm;
   }
 
-  // For each job we create tiny chunks which are then collected into larger, overlapping chunks
+  /**
+   * Private method to create tiny chunks, which are then collected into larger, overlapping chunks elsewhere
+   * @param {string} text Text to be chunked
+   * @returns {string[]} Array of chunked strings
+   */
   private createMicroChunks(text: string): string[] {
     const lines = text
       .split(/\n+/)
@@ -63,13 +85,18 @@ export class ResumeJobClassifier {
     return segments;
   }
 
-  // convenience method to count number of words
-  private wordCount(str: string): number {
-    return str.trim().split(/\s+/).filter(Boolean).length;
-  }
-
-  // Method to create overlapping chunks from smaller chunks
-  private createChunks(text_content: string, title: string | null, excerpt: string | null, site_name: string | null, maxWords = 220, minWords = 80, overlapWords = 40): string[] {
+  /**
+   * Private method to create overlapping chunks from smaller chunks
+   * @param {string} text_content Article text content
+   * @param {string|null} title Article title
+   * @param {string|null} excerpt Article excerpt
+   * @param {string|null} site_name Article site name
+   * @param {number} maxWords Maximum number of words in a chunk
+   * @param {number} minWords Minimum number of words in a chunk
+   * @param {number} overlapWords Number of words to overlap subsequent chunks by
+   * @returns {string[]} An array of strings that have been chunked
+   */
+  private createChunks(text_content: string, title: string | null, excerpt: string | null, site_name: string | null, maxWords: number = 220, minWords: number = 80, overlapWords: number = 40): string[] {
     const concatenatedInput = `${title ? 'Title:' + title : ''} ${excerpt ? 'Excerpt:' + excerpt : ''} ${site_name ? 'Site Name:' + site_name : ''} Text Content:${text_content}`;
 
     const norm = this.normalizeJobText(concatenatedInput);
@@ -111,6 +138,10 @@ export class ResumeJobClassifier {
     return chunks;
   }
 
+  /**
+   * Method to obtain embedded vectors for a resume and write them to the db
+   * @param {ResumeChunkElement[]} resumeText Array of resume strings
+   */
   async embedResume(resumeText: ResumeChunkElement[]) {
     console.info('Initiate resume embed');
     // Clear old data
@@ -131,8 +162,14 @@ export class ResumeJobClassifier {
     }
   }
 
-  // Loop through each job chunk and compare with every resume chunk
-  private matchJobToResume(jobEmbeds: number[][], resumeEmbeds: number[][]) {
+  /**
+   * Private method that loops through each job chunk embedding and compares that 
+   * with every resume chunk embedding using cosign similarity
+   * @param {number[][]} jobEmbeds Array of number arrays that comprise a job embedding
+   * @param {number[][]} resumeEmbeds Array of number arrays that comprise a job embedding
+   * @returns {ChunkMatch[]} Array of number to be reduced to a score
+   */
+  private matchJobToResume(jobEmbeds: number[][], resumeEmbeds: number[][]): ChunkMatch[] {
     const matches: ChunkMatch[] = [];
 
     for (let j = 0; j < jobEmbeds.length; j += 1) {
@@ -157,6 +194,11 @@ export class ResumeJobClassifier {
     return matches;
   }
 
+  /**
+   * Private method to derive a matching score (0-1) between a job and resume
+   * @param {ChunkMatch[]} matches 
+   * @returns {number} Matching score
+   */
   private overallFitScore(matches: ChunkMatch[]): number {
     if (!matches.length) return 0;
     const total = matches.reduce((sum, m) => sum + m.similarity, 0);
@@ -179,7 +221,7 @@ export class ResumeJobClassifier {
    * of the db with the results
    * @returns 
    */
-  async gradeFit() {
+  async gradeFit(excludeLessThanRes = 0.55, excludeLessThanSum = 0.55) {
     const resumeEmbeddings = await this.getResumeEmbeddings();
     const summaryEmbeddings = await this.getResumeSummaryEmbeddings();
 
@@ -204,12 +246,64 @@ export class ResumeJobClassifier {
     const summaryFitScore = this.overallFitScore(summaryResRtn);
 
     await this.db.setData(`
-      UPDATE parsed_jobs 
-      SET is_graded_whole = 'graded', resume_fit = ?, summary_fit = ? 
+      UPDATE discovered_jobs 
+      SET is_graded = 'graded', resume_fit_rough = ?, summary_fit_rough = ? 
       WHERE id = ? AND link= ?`, [wholeFitScore, summaryFitScore, id, link]);
-    console.info(`Whole resume - graded link: ${link.substring(0, 60 - 3)}...`);
+    console.info(`Graded fit - link: ${link.substring(0, 60 - 3)}...`);
+
+    // Assign to deep comparison table if conditions met
+    if (wholeFitScore > excludeLessThanRes || summaryFitScore > excludeLessThanSum) {
+      await this.db.insertData(`
+      INSERT INTO candidate_jobs (link)
+      VALUES (?)
+      `, [[link]]);
+
+      await this.db.setData(`
+        UPDATE OR IGNORE discovered_jobs
+        SET added_to_candidate = 'added'
+        WHERE id = ? AND link = ?
+        `, [id, link]);
+      console.info('Record added to candidate_jobs');
+    }
 
     // Recursive call to grade next job
     await this.gradeFit();
+  }
+
+  /**
+   * Method to check for candidate jobs outside of the normal flow of grading
+   */
+  async checkForCandidates(excludeLessThanRes = 0.55, excludeLessThanSum = 0.55) {
+    const candidateResults = await this.db.getAllData(`
+      SELECT id, link  FROM discovered_jobs
+      WHERE added_to_candidate = 'not_added'
+      AND (
+        resume_fit_rough > ?
+        OR summary_fit_rough > ?
+      )
+      `, [excludeLessThanRes, excludeLessThanSum]);
+
+    if (!candidateResults.length) {
+      console.info('No candidates found');
+      return;
+    }
+    
+    candidateResults.forEach(async ({ id, link }: { id: number, link: string; }) => {
+      await this.db.insertData(`
+        INSERT INTO candidate_jobs (link)
+        VALUES (?)
+        ON CONFLICT DO NOTHING
+        `, [[link]]
+      );
+
+      await this.db.setData(`
+        UPDATE OR IGNORE discovered_jobs
+        SET added_to_candidate = 'added'
+        WHERE id = ? AND link = ?
+        `, [id, link]);
+      console.info('Record added to candidate_jobs');
+    });
+
+
   }
 }

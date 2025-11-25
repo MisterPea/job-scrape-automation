@@ -10,13 +10,17 @@ export class PageFetch {
     this.db = db;
   }
 
-  private async getNextLink() {
+  /**
+ * Private method to retrieve the next row in order of id
+ * @returns {Object|boolean} Return is the row data as an object or false if data not present
+ */
+  private async getNextLink(): Promise<Record<string, any> | false> {
     const result = await this.db.getData(`
       UPDATE discovered_jobs
-      SET status='running'
+      SET parse_status='running'
       WHERE id = (
         SELECT id FROM discovered_jobs
-        WHERE status='pending'
+        WHERE parse_status='pending'
         ORDER BY id
         LIMIT 1
       )
@@ -24,7 +28,7 @@ export class PageFetch {
     `);
 
     if (!result) {
-      console.log('No pending jobs found');
+      console.log('No pending fetch jobs found');
       return false;
     }
     return result;
@@ -60,24 +64,30 @@ export class PageFetch {
 
       if (!article) {
         // If Moz/Readability fails, we log the error and move on.
-        await this.db.setData(`UPDATE discovered_jobs SET status='parsed_error' WHERE id=? AND link=?`, [id, link]);
+        await this.db.setData(`
+          UPDATE discovered_jobs
+          SET parse_status='parsing_error'
+          WHERE id=? AND link=?`, [id, link]);
         const errorObj = [{ date: currentDatetime(), location: "pageFetch_parse", error: `Couldn't parse link:${link}` }];
         writeCsv('errors.csv', errorObj);
         console.warn(`ERROR: Couldn't parse link:${link}`);
+
       } else {
+
         // If Moz/Readability parses, we add text_content to db
         const { title, textContent, excerpt, siteName } = article;
-        await this.db.setData(`UPDATE discovered_jobs SET status='parsed' WHERE id=? AND link=?`, [id, link]);
-        this.db.setData(`
-        INSERT OR IGNORE INTO parsed_jobs (link, title, excerpt, site_name, text_content)
-        VALUES (?, ?, ?, ?, ? )`,
-          [link, title, excerpt, siteName, textContent]
-        );
+        await this.db.setData(`
+          UPDATE discovered_jobs
+          SET parse_status = ?, title = ?, excerpt = ?, site_name = ?, text_content = ?
+          WHERE id=? AND link=?`, ['parsed', title, excerpt, siteName, textContent, id, link]);
       }
     } catch (err) {
       const errorObj = [{ date: currentDatetime(), location: 'pageFetch-general', error: err, url: link, retries: null }];
       writeCsv('errors.csv', errorObj);
-      await this.db.setData(`UPDATE discovered_jobs SET status='failed' WHERE id=? AND link=?`, [id, link]);
+      await this.db.setData(`
+        UPDATE discovered_jobs
+        SET parse_status='failed' 
+        WHERE id=? AND link=?`, [id, link]);
       await browser.close();
     }
 
@@ -88,8 +98,8 @@ export class PageFetch {
   async resetRunningTags() {
     await this.db.setData(`
       UPDATE discovered_jobs
-      SET status='pending'
-      WHERE status='running'
+      SET parse_status='pending'
+      WHERE parse_status='running'
       `, []);
   }
 }

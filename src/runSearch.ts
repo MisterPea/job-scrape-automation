@@ -16,17 +16,10 @@ export class Search {
     this.db = db;
   }
 
-  private timeoutPromise(ms = 100) {
-    return new Promise((resolve, _) => {
-      setTimeout(() => {
-        resolve(true);
-      }, ms);
-    });
-  }
-
   /**
    * Method to coordinate the searching and writing of job-search results.
    * @param {string[]} terms Terms to search for via Google Custom Search
+   * @returns None
    */
   async getResults(terms: string[]) {
     console.info(`Initiating Google Custom Search`);
@@ -48,7 +41,7 @@ export class Search {
       console.info('No search results');
       return;
     }
-    
+
     try {
       await this.db.insertData(`
         INSERT OR IGNORE INTO discovered_jobs (${keys.join(', ')})
@@ -61,12 +54,33 @@ export class Search {
     }
   }
 
-  // remove `/apply` and `/application` when they appear at the end of url
-  private cleanLink(link: string) {
+  /**
+   * Private method to handle timeout
+   * @param {number} ms Number of milliseconds to timeout - can be adjusted for 429 violations
+   * @returns {Promise}
+   */
+  private timeoutPromise(ms: number = 100): Promise<boolean> {
+    return new Promise((resolve, _) => {
+      setTimeout(() => {
+        resolve(true);
+      }, ms);
+    });
+  }
+
+  /**
+   * Private method to remove `/apply` and `/application` when they appear at the end of url
+   * @param {string} link String of URL to clean
+   * @returns {string} Cleaned URL
+   */
+  private cleanLink(link: string): string {
     const regex = /\/(apply|application)(?:[\/?].*)?$/;
     return link.replace(regex, '');
   }
 
+  /**
+   * Private method to run actual search and make additional requests if multiple pages are available
+   * @returns None - Output is placed in class variable `this.searchItems`.
+   */
   private async runSearch() {
     if (this.queue.length === 0) return;
 
@@ -94,7 +108,7 @@ export class Search {
         const { queries, items } = data;
         if (!items) return; // needed, as sometimes there's a valid return with no items (meaning end of query)
 
-        const sanitizedItems = items.map(({ title, link, snippet }: { title: string, link: string, snippet: string; }) => ({ title, link: this.cleanLink(link), snippet }));
+        const sanitizedItems = items.map(({ title, link }: { title: string, link: string; }) => ({ title, link: this.cleanLink(link) }));
 
         this.searchItems.push(...sanitizedItems);
 

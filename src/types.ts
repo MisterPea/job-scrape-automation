@@ -21,7 +21,7 @@ export interface SearchResult {
 export interface SanitizedSearchResult {
   title: string,
   link: string,
-  snippet: string,
+  snippet?: string,
 }
 
 export type ChunkMatch = {
@@ -29,3 +29,30 @@ export type ChunkMatch = {
   resumeIndex: number;
   similarity: number;
 };
+
+/* LRM Deep Comparison Output */
+type softwareAttributes = {
+  languages: string[];
+  frameworks: string[];
+  tools: string[];
+  platforms: string[];
+};
+
+type skillsAttributes = {
+  technical: string[];
+  process: string[];
+  other: string[];
+};
+
+type GapsAndOverlaps = {
+  software: softwareAttributes;
+  skills: skillsAttributes;
+};
+
+export interface DeepCompareOutput {
+  fit_score: number;
+  fit_label: "strong" | "medium" | "weak";
+  overlap: GapsAndOverlaps;
+  gaps: GapsAndOverlaps;
+
+}
