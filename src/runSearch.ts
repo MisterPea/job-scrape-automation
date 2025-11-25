@@ -6,13 +6,13 @@ import currentDatetime from "./helpers/getDate";
 
 export class Search {
   queue: Array<{ retries: number; url: string; }> = [];
-  searchItems: Array<SanitizedSearchResult> = [];
+  searchReturnItems: Array<SanitizedSearchResult> = [];
 
   constructor(public config: AppConfig, public db: any, public maxRetries: number = 3) {
     this.config = config;
     this.maxRetries = maxRetries;
     this.queue = [];
-    this.searchItems = [];
+    this.searchReturnItems = [];
     this.db = db;
   }
 
@@ -22,29 +22,30 @@ export class Search {
    * @returns None
    */
   async getResults(terms: string[]) {
-    console.info(`Initiating Google Custom Search`);
+
     const { searchApiKey, searchIdCx, timePeriod, sortBy } = this.config;
     for (const term of terms) {
       const rootSearchUrl = `https://www.googleapis.com/customsearch/v1?key=${searchApiKey}&cx=${searchIdCx}&dateRestrict=${timePeriod}&sort=${sortBy}`;
-      const perSearchUrl = `${rootSearchUrl}&q=${encodeURIComponent(term)}`;
+      const perSearchUrl = `${rootSearchUrl}&q="${term}"`; // Exact quote
+      // const perSearchUrl = `${rootSearchUrl}&q=${encodeURIComponent(term)}`;
       this.queue.push({ retries: 0, url: perSearchUrl });
     }
 
-    // Search places items in class-scoped this.searchItems
+    // Search places items in class-scoped this.searchReturnItems
     await this.runSearch();
 
     // Write to sqlite
     console.info(`Preparing search results`);
-    const { keys, vals } = this.db.prepareObjectsForInsert(this.searchItems);
+    const { keys, vals } = this.db.prepareObjectsForInsert(this.searchReturnItems);
 
     if (!vals.length) {
       console.info('No search results');
       return;
     }
 
-    try {
+    try { 
       await this.db.insertData(`
-        INSERT OR IGNORE INTO discovered_jobs (${keys.join(', ')})
+        INSERT OR IGNORE INTO discovered_jobs (${keys.join(', ')}) 
         VALUES (${new Array(keys.length).fill('?').join(', ')})`,
         vals
       );
@@ -79,7 +80,7 @@ export class Search {
 
   /**
    * Private method to run actual search and make additional requests if multiple pages are available
-   * @returns None - Output is placed in class variable `this.searchItems`.
+   * @returns None - Output is placed in class variable `this.searchReturnItems`.
    */
   private async runSearch() {
     if (this.queue.length === 0) return;
@@ -88,12 +89,14 @@ export class Search {
     let originalUrl = undefined;
 
     while (this.queue.length > 0) {
-      const queueElement = this.queue.pop();
-      if (!queueElement) return;
+      const queueElement: { url: string, retries: number; } | undefined = this.queue.pop();
+      if (!queueElement) continue;
 
       const { url, retries } = queueElement;
 
-      if (retries >= this.maxRetries) return;
+      if (retries >= this.maxRetries) continue;
+
+      // set originalUrl
       if (originalUrl === undefined) originalUrl = url;
 
       try {
@@ -106,23 +109,25 @@ export class Search {
         });
 
         const { queries, items } = data;
-        if (!items) return; // needed, as sometimes there's a valid return with no items (meaning end of query)
+        if (!items) continue; // needed, as sometimes there's a valid return with no items (meaning end of query)
 
         const sanitizedItems = items.map(({ title, link }: { title: string, link: string; }) => ({ title, link: this.cleanLink(link) }));
 
-        this.searchItems.push(...sanitizedItems);
+        this.searchReturnItems.push(...sanitizedItems);
 
         // if more pages, the search result says so. Therefor if nextPage, we get the start index and 
         // push the url back into the queue.
         if (queries.nextPage) {
           this.queue.push({ retries: 0, url: `${originalUrl}&start=${queries.nextPage[0].startIndex}` });
         }
+        
       } catch (err) {
         this.queue.push({ url, retries: retries + 1 });
         const errorObj = [{ date: currentDatetime(), location: "search", error: JSON.stringify(err), url, retries }];
         writeCsv('errors.csv', errorObj);
       }
-      await this.timeoutPromise();
+
+      await this.timeoutPromise(500);
     }
     return;
   }
