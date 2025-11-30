@@ -3,10 +3,12 @@ import axios from "axios";
 import { SanitizedSearchResult } from "./types";
 import writeCsv from "./csvControl";
 import currentDatetime from "./helpers/getDate";
+import { TitleGroup } from "./searchData";
 
 export class Search {
-  queue: Array<{ retries: number; url: string; }> = [];
+  queue: Array<{ retries: number; url: string, searchTerm: string; }> = [];
   searchReturnItems: Array<SanitizedSearchResult> = [];
+  wildcardSearches: Array<string>;
 
   constructor(public config: AppConfig, public db: any, public maxRetries: number = 3) {
     this.config = config;
@@ -14,6 +16,13 @@ export class Search {
     this.queue = [];
     this.searchReturnItems = [];
     this.db = db;
+    this.wildcardSearches = ["jobs.*", "careers.*", "*.com/careers", "*.com/jobs"];
+  }
+
+  private buildJobQuery(termGroup: TitleGroup): string {
+    const { baseTitle, variants } = termGroup;
+    const compiled = `q=${encodeURIComponent(baseTitle)}&as_oq=${encodeURIComponent(variants.map((e) => `"${e}"`).join(' '))}`;
+    return compiled;
   }
 
   /**
@@ -21,14 +30,13 @@ export class Search {
    * @param {string[]} terms Terms to search for via Google Custom Search
    * @returns None
    */
-  async getResults(terms: string[]) {
-
-    const { searchApiKey, searchIdCx, timePeriod, sortBy } = this.config;
-    for (const term of terms) {
-      const rootSearchUrl = `https://www.googleapis.com/customsearch/v1?key=${searchApiKey}&cx=${searchIdCx}&dateRestrict=${timePeriod}&sort=${sortBy}`;
-      const perSearchUrl = `${rootSearchUrl}&q="${term}"`; // Exact quote
-      // const perSearchUrl = `${rootSearchUrl}&q=${encodeURIComponent(term)}`;
-      this.queue.push({ retries: 0, url: perSearchUrl });
+  async getResults(terms: TitleGroup[]) {
+    const { searchApiKey, siteSearchIdCx, timePeriod, sortBy, language, searchCountry } = this.config;
+    for (const termGroup of terms) {
+      const siteSearchUrl = `https://www.googleapis.com/customsearch/v1?key=${searchApiKey}&cx=${siteSearchIdCx}&dateRestrict=${timePeriod}&sort=${sortBy}&lr=${language}&gl=${searchCountry}`;
+      const termsString = this.buildJobQuery(termGroup);
+      const perSearchUrl = `${siteSearchUrl}&${termsString}`;
+      this.queue.push({ retries: 0, url: perSearchUrl, searchTerm: termsString });
     }
 
     // Search places items in class-scoped this.searchReturnItems
@@ -43,7 +51,7 @@ export class Search {
       return;
     }
 
-    try { 
+    try {
       await this.db.insertData(`
         INSERT OR IGNORE INTO discovered_jobs (${keys.join(', ')}) 
         VALUES (${new Array(keys.length).fill('?').join(', ')})`,
@@ -66,7 +74,7 @@ export class Search {
         resolve(true);
       }, ms);
     });
-  }
+  };
 
   /**
    * Private method to remove `/apply` and `/application` when they appear at the end of url
@@ -89,10 +97,10 @@ export class Search {
     let originalUrl = undefined;
 
     while (this.queue.length > 0) {
-      const queueElement: { url: string, retries: number; } | undefined = this.queue.pop();
+      const queueElement: { url: string, retries: number, searchTerm: string; } | undefined = this.queue.pop();
       if (!queueElement) continue;
 
-      const { url, retries } = queueElement;
+      const { url, retries, searchTerm } = queueElement;
 
       if (retries >= this.maxRetries) continue;
 
@@ -115,14 +123,19 @@ export class Search {
 
         this.searchReturnItems.push(...sanitizedItems);
 
+        // log the number of results from search
+        const d = currentDatetime();
+        const resultsRecordObj = { date: d, search_term: searchTerm, num_results: sanitizedItems.length };
+        writeCsv('search_term_results.csv', [resultsRecordObj]);
+
         // if more pages, the search result says so. Therefor if nextPage, we get the start index and 
         // push the url back into the queue.
         if (queries.nextPage) {
-          this.queue.push({ retries: 0, url: `${originalUrl}&start=${queries.nextPage[0].startIndex}` });
+          this.queue.push({ retries: 0, url: `${originalUrl}&start=${queries.nextPage[0].startIndex}`, searchTerm });
         }
-        
+
       } catch (err) {
-        this.queue.push({ url, retries: retries + 1 });
+        this.queue.push({ url, retries: retries + 1, searchTerm });
         const errorObj = [{ date: currentDatetime(), location: "search", error: JSON.stringify(err), url, retries }];
         writeCsv('errors.csv', errorObj);
       }

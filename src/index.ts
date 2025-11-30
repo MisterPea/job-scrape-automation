@@ -1,6 +1,6 @@
 import { loadConfig } from "./config";
 import { Search } from "./runSearch";
-import { searchTerms } from "./searchData";
+import { TITLE_GROUPS } from "./searchData";
 import { DB } from "./db/DB";
 import { PageFetch } from "./runPageFetch";
 import { ResumeJobClassifier } from "./runGrading";
@@ -19,19 +19,19 @@ async function main() {
   // 
 
   // Google search - writes results to db
-  await s.getResults(searchTerms);
+  // await s.getResults(TITLE_GROUPS);
 
   // Visit each site, pull the site content and write to db
   await pf.getPageData();
 
   // Grade fit
-  await rjc.gradeFit();
+  // await rjc.gradeFit();
   // await rjc.checkForCandidates()
 
   // Look at jobs that are better than a coin flip
-  rm.deepCompareJobResumeText();
+  // rm.deepCompareJobResumeText();
 
-  console.info('All jobs complete');
+  // console.info('All jobs complete');
   // Reset tags
   // pf.resetRunningTags()
 }

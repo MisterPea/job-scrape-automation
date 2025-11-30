@@ -3,6 +3,12 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import puppeteer from 'puppeteer';
 import currentDatetime from './helpers/getDate';
 import writeCsv from './csvControl';
+import { parseWithTimeout } from './parser/parseController';
+
+interface ResultWithArticle {
+  article: any; // Use a more specific type if possible (e.g., ArticleObject)
+  [key: string]: any;
+}
 
 export class PageFetch {
 
@@ -53,14 +59,12 @@ export class PageFetch {
 
       await browser.close();
 
-      const virtualConsole = new VirtualConsole();
-      virtualConsole.off;
-
       console.info(`Page fetch - Parsing: ${link}`);
-      const dom = new JSDOM(fullHtml, { url: link, virtualConsole });
-      const reader = new Readability(dom.window.document, { charThreshold: 0, disableJSONLD: true });
 
-      const article = reader.parse();
+      // Parse on thread to allow exit if processing takes too long.
+      const result = await parseWithTimeout(fullHtml, link);
+      if (!result) throw new Error('Error in parsing');
+      const { article } = result as ResultWithArticle;
 
       if (!article) {
         // If Moz/Readability fails, we log the error and move on.
