@@ -7,9 +7,10 @@ export type TitleGroup = {
 export const TITLE_GROUPS: TitleGroup[] = [
   {
     id: "react_frontend",
-    baseTitle: "React Engineer",
+    baseTitle: "React Developer",
     variants: [
-      "React Developer",
+      "React.js",
+      "Next.js",
       "Frontend Engineer",
       "Frontend Developer",
       "Front-End Developer",
@@ -25,13 +26,14 @@ export const TITLE_GROUPS: TitleGroup[] = [
       "Frontend Developer",
       "Web Engineer",
       "Web Developer",
+      "Web Designer",
       "JavaScript Engineer",
       "TypeScript Engineer",
     ],
   },
   {
     id: "ui_ux_engineer",
-    baseTitle: "UI Engineer",
+    baseTitle: "UI Developer",
     variants: [
       "UX Engineer",
       "Frontend Engineer",
@@ -40,8 +42,3 @@ export const TITLE_GROUPS: TitleGroup[] = [
     ],
   },
 ];
-
-
-// Not used endpoints:
-// *.com/*/jobs*
-// *.com/*/careers*

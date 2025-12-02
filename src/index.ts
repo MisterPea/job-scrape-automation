@@ -19,17 +19,17 @@ async function main() {
   // 
 
   // Google search - writes results to db
-  // await s.getResults(TITLE_GROUPS);
+  await s.getResults(TITLE_GROUPS);
 
   // Visit each site, pull the site content and write to db
   await pf.getPageData();
 
   // Grade fit
-  // await rjc.gradeFit();
+  await rjc.gradeFit();
   // await rjc.checkForCandidates()
 
   // Look at jobs that are better than a coin flip
-  // rm.deepCompareJobResumeText();
+  rm.deepCompareJobResumeText();
 
   // console.info('All jobs complete');
   // Reset tags
@@ -63,7 +63,7 @@ async function resetRunningDiscoverdJobs() {
   await db.setData(`
     UPDATE discovered_jobs
     SET parse_status='pending'
-    WHERE parse_status='not_parsed'
+    WHERE parse_status='not_parsed' OR parse_status='running'
     `, []);
 }
 

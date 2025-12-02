@@ -83,7 +83,12 @@ export class Search {
    */
   private cleanLink(link: string): string {
     const regex = /\/(apply|application)(?:[\/?].*)?$/;
-    return link.replace(regex, '');
+    const filterRoots = /(\/career|job)(s*)(\/*)$/; // don't pass on urls ending in career(s) or job(s)
+    const cleanLink = link.replace(regex, '');
+    if (filterRoots.test(cleanLink)) {
+      return ''; // return nothing if ends in career(s) or job
+    }
+    return cleanLink;
   }
 
   /**
@@ -119,9 +124,15 @@ export class Search {
         const { queries, items } = data;
         if (!items) continue; // needed, as sometimes there's a valid return with no items (meaning end of query)
 
-        const sanitizedItems = items.map(({ title, link }: { title: string, link: string; }) => ({ title, link: this.cleanLink(link) }));
+        const sanitizedItems = items.map(({ title, link }: { title: string, link: string; }) => {
+          const cleanedLink = this.cleanLink(link);
+          if (!cleanedLink.length) {
+            return null;
+          }
+          return { title, link: cleanedLink };
+        });
 
-        this.searchReturnItems.push(...sanitizedItems);
+        this.searchReturnItems.push(...sanitizedItems.filter(Boolean));
 
         // log the number of results from search
         const d = currentDatetime();
