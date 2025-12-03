@@ -8,7 +8,6 @@ import { TitleGroup } from "./searchData";
 export class Search {
   queue: Array<{ retries: number; url: string, searchTerm: string; }> = [];
   searchReturnItems: Array<SanitizedSearchResult> = [];
-  wildcardSearches: Array<string>;
 
   constructor(public config: AppConfig, public db: any, public maxRetries: number = 3) {
     this.config = config;
@@ -16,7 +15,6 @@ export class Search {
     this.queue = [];
     this.searchReturnItems = [];
     this.db = db;
-    this.wildcardSearches = ["jobs.*", "careers.*", "*.com/careers", "*.com/jobs"];
   }
 
   private buildJobQuery(termGroup: TitleGroup): string {
@@ -36,6 +34,7 @@ export class Search {
       const siteSearchUrl = `https://www.googleapis.com/customsearch/v1?key=${searchApiKey}&cx=${siteSearchIdCx}&dateRestrict=${timePeriod}&sort=${sortBy}&lr=${language}&gl=${searchCountry}`;
       const termsString = this.buildJobQuery(termGroup);
       const perSearchUrl = `${siteSearchUrl}&${termsString}`;
+
       this.queue.push({ retries: 0, url: perSearchUrl, searchTerm: termsString });
     }
 
@@ -77,15 +76,37 @@ export class Search {
   };
 
   /**
+   * Private method to take urls and convert them to regex for inclusion in url blocking
+   * @param {string[]} blockList Array of strings of URLs to be converted to regular expression
+   * @returns {RegExp} Returns a concatenated regular expression
+   */
+  private getRegexForBlocking(): RegExp {
+    const regexReturn = [];
+    for (const url of this.config.blockList) {
+      const newUrl = url.split('').map((s) => {
+        if (s === '/') { return '\\/'; }
+        if (s === '.') { return `\\.`; }
+        else { return s; }
+      });
+      const insertionFrame = `^(.*)(${newUrl.join('')})(.*)$`;
+      regexReturn.push(insertionFrame);
+    }
+    const regex = new RegExp(regexReturn.join('|'));
+    return regex;
+  }
+
+  /**
    * Private method to remove `/apply` and `/application` when they appear at the end of url
    * @param {string} link String of URL to clean
    * @returns {string} Cleaned URL
    */
   private cleanLink(link: string): string {
+    const { blockList } = this.config;
     const regex = /\/(apply|application)(?:[\/?].*)?$/;
     const filterRoots = /(\/career|job)(s*)(\/*)$/; // don't pass on urls ending in career(s) or job(s)
+    const blockRegex = this.getRegexForBlocking();
     const cleanLink = link.replace(regex, '');
-    if (filterRoots.test(cleanLink)) {
+    if (filterRoots.test(cleanLink) || blockRegex.test(cleanLink)) {
       return ''; // return nothing if ends in career(s) or job
     }
     return cleanLink;
@@ -125,6 +146,8 @@ export class Search {
         if (!items) continue; // needed, as sometimes there's a valid return with no items (meaning end of query)
 
         const sanitizedItems = items.map(({ title, link }: { title: string, link: string; }) => {
+
+          // Clean links ending in /application or /apply - remove block listed urls
           const cleanedLink = this.cleanLink(link);
           if (!cleanedLink.length) {
             return null;
@@ -156,3 +179,5 @@ export class Search {
     return;
   }
 }
+
+
