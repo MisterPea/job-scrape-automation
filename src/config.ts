@@ -17,7 +17,8 @@ export function loadConfig(): AppConfig {
 
   const blockList = [
     'facebook.com/groups',
-    'careers.cognizant.com'
+    'careers.cognizant.com',
+    'remoterocketship.com'
   ];
 
   return {

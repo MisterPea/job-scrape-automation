@@ -1,25 +1,22 @@
-import { Readability } from '@mozilla/readability';
-import { JSDOM, VirtualConsole } from 'jsdom';
-import puppeteer from 'puppeteer';
 import currentDatetime from './helpers/getDate';
 import writeCsv from './csvControl';
 import { parseWithTimeout } from './parser/parseController';
+import { VirtualBrowser } from "./VirtualBrowser";
 
 interface ResultWithArticle {
   article: any; // Use a more specific type if possible (e.g., ArticleObject)
   [key: string]: any;
 }
 
-export class PageFetch {
-
+export class JobDataRetrieval {
   constructor(public db: any) {
     this.db = db;
   }
 
   /**
- * Private method to retrieve the next row in order of id
- * @returns {Object|boolean} Return is the row data as an object or false if data not present
- */
+  * Private method to retrieve the next row in order of id
+  * @returns {Object|boolean} Return is the row data as an object or false if data not present
+  */
   private async getNextLink(): Promise<Record<string, any> | false> {
     const result = await this.db.getData(`
       UPDATE discovered_jobs
@@ -40,34 +37,32 @@ export class PageFetch {
     return result;
   }
 
-  async getPageData() {
+  /**
+   * Trunk method to request page via puppeteer and attempt to parse with Moz/Readability
+   * @returns none - Returns recursive promise which resolves when all jobs complete
+   */
+  async retrieveJob() {
     const nextLink = await this.getNextLink();
     if (!nextLink) return;
 
-    const { link, id } = nextLink;
+    const vb = new VirtualBrowser();
 
-    const browser = await puppeteer.launch({ args: ['--disable-notifications'] });
-    const page = await browser.newPage();
-    page.setUserAgent({
-      userAgent: "Unartful-Labs/1.0 (+contact: unartfully@gmail.com)"
-    });
+    const { link, id } = nextLink;
 
     try {
       console.info(`Page fetch - Visiting: ${link}`);
-      await page.goto(link, { waitUntil: 'networkidle0' });
-      const fullHtml = await page.content();
-
-      await browser.close();
+      const { main } = await vb.getPage(link);
+      if (!main) throw new Error('Error: No data returned from page visit')
 
       console.info(`Page fetch - Parsing: ${link}`);
-
       // Parse on thread to allow exit if processing takes too long.
-      const result = await parseWithTimeout(fullHtml, link);
+      const result = await parseWithTimeout(main, link);
+
       if (!result) throw new Error('Error in parsing');
-      const { article } = result as ResultWithArticle;
+      const { article, siteData } = result as ResultWithArticle;
 
       if (!article) {
-        // If Moz/Readability fails, we log the error and move on.
+        // If Moz / Readability fails, we log the error and move on.;
         await this.db.setData(`
           UPDATE discovered_jobs
           SET parse_status='parsing_error'
@@ -79,31 +74,17 @@ export class PageFetch {
       } else {
 
         // If Moz/Readability parses, we add text_content to db
-        const { title, textContent, excerpt, siteName } = article;
+        const { title, excerpt, siteName } = article;
         await this.db.setData(`
           UPDATE discovered_jobs
           SET parse_status = ?, title = ?, excerpt = ?, site_name = ?, text_content = ?
-          WHERE id=? AND link=?`, ['parsed', title, excerpt, siteName, textContent, id, link]);
+          WHERE id=? AND link=?`, ['parsed', title, excerpt, siteName, siteData, id, link]);
       }
     } catch (err) {
-      const errorObj = [{ date: currentDatetime(), location: 'pageFetch-general', error: err, url: link, retries: null }];
-      writeCsv('errors.csv', errorObj);
-      await this.db.setData(`
-        UPDATE discovered_jobs
-        SET parse_status='failed' 
-        WHERE id=? AND link=?`, [id, link]);
-      await browser.close();
+      // General catch
+      console.info("Error:", err);
     }
-
     // recursive call till all are done
-    await this.getPageData();
-  }
-
-  async resetRunningTags() {
-    await this.db.setData(`
-      UPDATE discovered_jobs
-      SET parse_status='pending'
-      WHERE parse_status='running'
-      `, []);
+    await this.retrieveJob();
   }
 }

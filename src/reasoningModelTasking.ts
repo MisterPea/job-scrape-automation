@@ -86,19 +86,19 @@ export class ReasoningModel {
 
       const { text_content } = discoveredData;
 
-      const userData = {
-        job_description_text: text_content,
-        resume_summary_text: resSummaryText,
-        resume_chunks_text: resEmbeddingText,
-        optional_notes: 'none'
-      };
-
       // Set current job as in_progress
       await this.db.setData(`
         UPDATE candidate_jobs
         SET deep_comparison = 'in_progress'
         WHERE id = ? AND link = ?
         `, [id, link]);
+
+      const userData = {
+        job_description_text: text_content,
+        resume_summary_text: resSummaryText,
+        resume_chunks_text: resEmbeddingText,
+        optional_notes: link
+      };
 
       const response = await this.client.chat.completions.create({
         model: this.REASONING_MODEL,
@@ -165,6 +165,6 @@ export class ReasoningModel {
         `, [id, link]);
     }
     console.info('Deep Compare - Complete');
-    return
+    return;
   }
 };
