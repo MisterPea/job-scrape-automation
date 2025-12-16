@@ -103,7 +103,7 @@ export class Search {
   private cleanLink(link: string): string {
     const { blockList } = this.config;
     const regex = /\/(apply|application)(?:[\/?].*)?$/;
-    const filterRoots = /(\/career|job)(s*)(\/*)$/; // don't pass on urls ending in career(s) or job(s)
+    const filterRoots = /(\/career|job|jobsearch)(s*)(\/*)$/; // don't pass on urls ending in career(s) or job(s)
     const blockRegex = this.getRegexForBlocking();
     const cleanLink = link.replace(regex, '');
     if (filterRoots.test(cleanLink) || blockRegex.test(cleanLink)) {
