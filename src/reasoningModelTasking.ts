@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { prompts, UserData } from "./data/prompts";
+import { prompts } from "./data/prompts";
 import { embedTexts } from "./vectorEmbeddings";
 import { DeepCompareOutput } from "./types";
 
@@ -111,7 +111,7 @@ export class ReasoningModel {
 
       const content = response.choices[0].message.content;
       // Temp log - calculate token usage
-      console.log('PROMPT_DETAILS:',response.usage?.prompt_tokens,'COMPLETION_DETAILS:',response.usage?.completion_tokens)
+      console.log('PROMPT_DETAILS:', response.usage?.prompt_tokens, 'COMPLETION_DETAILS:', response.usage?.completion_tokens);
       if (!content) {
         console.error(`Deep Compare - missing response content for job id ${id} (${link})`);
         continue;

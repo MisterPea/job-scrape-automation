@@ -3,7 +3,7 @@ import axios from "axios";
 import { SanitizedSearchResult } from "./types";
 import writeCsv from "./csvControl";
 import currentDatetime from "./helpers/getDate";
-import { TitleGroup } from "./searchData";
+import { TitleGroup } from "./data/searchData";
 
 export class Search {
   queue: Array<{ retries: number; url: string, searchTerm: string; }> = [];
