@@ -1,7 +1,7 @@
 export type UserData = {
-  job_description_text: string,
-  resume_summary_text: string,
-  resume_chunks_text: string,
+  job_description_text: string;
+  resume_summary_text: string;
+  resume_chunks_text: string;
   optional_notes?: string;
 };
 
@@ -18,7 +18,12 @@ You MUST:
 - Be conservative: do NOT infer skills that are not clearly supported by the resume.
 - Return output as VALID JSON ONLY, with no comments, no extra fields, and no trailing commas.
 - Follow the JSON schema exactly as described in the user message.`,
-  userMessage: ({ job_description_text, resume_summary_text, resume_chunks_text, optional_notes }: UserData) => (`
+  userMessage: ({
+    job_description_text,
+    resume_summary_text,
+    resume_chunks_text,
+    optional_notes,
+  }: UserData) => `
 You will be given:
 
 1. A job description.
@@ -116,7 +121,7 @@ ${resume_chunks_text}
 OPTIONAL_NOTES:
 """
 ${optional_notes}
-"""`),
+"""`,
   resumeSummarySystemMessage: `You are an assistant that summarizes resumes for educated professionals, producing concise, third-person summaries suitable for technical profiles and machine-readable embedding.
 
 Your job is to:
@@ -141,5 +146,5 @@ Critical rules:
 
 Formatting rules:
 - Each part must start with a clear label followed by a colon (e.g., "Headline:", "Summary:", "Hard Skills:", "Soft Skills:").
-- Do NOT include commentary, meta explanations, or trailing commas.`
+- Do NOT include commentary, meta explanations, or trailing commas.`,
 };

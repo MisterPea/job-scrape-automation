@@ -1,8 +1,8 @@
 export interface TitleGroup {
   id: string;
-  baseTitle: string;     // used in q=
-  variants: string[];    // used in as_oq
-};
+  baseTitle: string; // used in q=
+  variants: string[]; // used in as_oq
+}
 
 export const TITLE_GROUPS: TitleGroup[] = [
   {

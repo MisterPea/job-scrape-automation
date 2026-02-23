@@ -1,22 +1,21 @@
-import { loadConfig } from "./config";
-import { Search } from "./_discovery/job_discovery";
-import { TITLE_GROUPS } from "./_discovery/job_discovery.terms";
-import { DB, type DbConfig } from '@misterpea/sqlite-worker-db';
-import { JobDataRetrieval } from './_discovery-parsing/runJobDataRetrieval';
-import { ResumeJobClassifier } from "./_grading-embed/job_grading";
-import { resumeText } from "./data/resumeText";
-import { ReasoningModel } from './_grading-reasoning/job_reasoning';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { loadConfig } from "./config.js";
+import { Search } from "./_discovery/job_discovery.js";
+import { TITLE_GROUPS } from "./_discovery/job_discovery.terms.js";
+import { DB, type DbConfig } from "@misterpea/sqlite-worker-db";
+import { JobDataRetrieval } from "./_discovery-parsing/runJobDataRetrieval.js";
+import { ResumeJobClassifier } from "./_grading-embed/job_grading.js";
+import { resumeText } from "./data/resumeText.js";
+import { ReasoningModel } from "./_grading-reasoning/job_reasoning.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbConfig: DbConfig = {
-  schemaPath: path.join(__dirname, './schemas/schema.sql'),
-  dbPath: path.join(__dirname, '../sqlite/jobs.db')
+  schemaPath: path.join(__dirname, "./schemas/schema.sql"),
+  dbPath: path.join(__dirname, "../sqlite/jobs.db"),
 };
-
 
 /**
  * Main function block to handle the main flow of acquisition and grading of jobs
@@ -63,9 +62,12 @@ async function embedResume() {
  */
 async function resetGrade() {
   const db = new DB(dbConfig);
-  await db.setData(`
+  await db.setData(
+    `
     UPDATE parsed_jobs
-    SET is_graded_whole='not_graded', is_graded_summary='not_graded' `, []);
+    SET is_graded_whole='not_graded', is_graded_summary='not_graded' `,
+    [],
+  );
 }
 
 /**
@@ -73,9 +75,12 @@ async function resetGrade() {
  */
 async function resetDeepCompare() {
   const db = new DB(dbConfig);
-  await db.setData(`
+  await db.setData(
+    `
     UPDATE candidate_jobs
-    SET deep_comparison = 'pending'`, []);
+    SET deep_comparison = 'pending'`,
+    [],
+  );
 }
 
 /**
@@ -83,11 +88,14 @@ async function resetDeepCompare() {
  */
 async function resetRunningDiscoverdJobs() {
   const db = new DB(dbConfig);
-  await db.setData(`
+  await db.setData(
+    `
     UPDATE discovered_jobs
     SET parse_status='pending'
     WHERE parse_status='not_parsed' OR parse_status='running'
-    `, []);
+    `,
+    [],
+  );
 }
 
 /**
@@ -96,52 +104,63 @@ async function resetRunningDiscoverdJobs() {
 async function reRunStalledGrading() {
   const db = new DB(dbConfig);
   const rjc = new ResumeJobClassifier(db);
-  await db.setData(`
+  await db.setData(
+    `
       UPDATE parsed_jobs
       SET is_graded = 'not_graded'
       WHERE is_graded = 'in_progress'
-      `, []);
+      `,
+    [],
+  );
   await rjc.gradeFit();
 }
 
 /**
- * On failed discovery - reset failed jobs and retry 
+ * On failed discovery - reset failed jobs and retry
  * (Might not be needed with new discovery error handling)
  */
 async function resetFailedDiscovered() {
   const db = new DB(dbConfig);
-  await db.setData(`
+  await db.setData(
+    `
     UPDATE discovered_jobs
     SET parse_status='pending'
-    WHERE parse_status='failed'`, []);
-  console.log('failed jobs reset');
+    WHERE parse_status='failed'`,
+    [],
+  );
+  console.log("failed jobs reset");
 }
 
 /**
- * ************* Danger ************* 
+ * ************* Danger *************
  * ** Don't use - for testing only **
  */
 async function eraseDiscoveredJobs() {
   const db = new DB(dbConfig);
-  await db.setData(`
-    DROP TABLE discovered_jobs`, []);
-  console.log('discovered_jobs deleted');
+  await db.setData(
+    `
+    DROP TABLE discovered_jobs`,
+    [],
+  );
+  console.log("discovered_jobs deleted");
 }
 
 /**
- * ************* Danger ************* 
+ * ************* Danger *************
  * ** Don't use - for testing only **
  */
 async function eraseCandidateJobs() {
   const db = new DB(dbConfig);
-  await db.setData(`
-    DROP TABLE candidate_jobs`, []);
-  console.log('candidate_jobs deleted');
+  await db.setData(
+    `
+    DROP TABLE candidate_jobs`,
+    [],
+  );
+  console.log("candidate_jobs deleted");
 }
 
-//* If grading fails - we can rerun *// 
+//* If grading fails - we can rerun *//
 // reRunStalledGrading();
-
 
 // resetGrade();
 // embedResume()
@@ -153,8 +172,6 @@ main();
 
 /* Reset failed jobs on discovered_jobs table */
 // resetFailedDiscovered();
-
-
 
 // eraseCandidateJobs()
 // eraseDiscoveredJobs();

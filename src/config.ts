@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Language, SearchCountry } from "./types";
+import type { Language, SearchCountry } from "./types";
 
 export type AppConfig = {
   searchApiKey: string;
@@ -12,22 +12,24 @@ export type AppConfig = {
 };
 
 export function loadConfig(): AppConfig {
-  if (!process.env.SEARCH_API_KEY) throw new Error("SEARCH_API_KEY is required");
-  if (!process.env.SITE_SEARCH_ID_CX) throw new Error("SITE_SEARCH_ID_CX is required");
+  if (!process.env.SEARCH_API_KEY)
+    throw new Error("SEARCH_API_KEY is required");
+  if (!process.env.SITE_SEARCH_ID_CX)
+    throw new Error("SITE_SEARCH_ID_CX is required");
 
   const blockList = [
-    'facebook.com/groups',
-    'careers.cognizant.com',
-    'remoterocketship.com'
+    "facebook.com/groups",
+    "careers.cognizant.com",
+    "remoterocketship.com",
   ];
 
   return {
     searchApiKey: process.env.SEARCH_API_KEY,
     siteSearchIdCx: process.env.SITE_SEARCH_ID_CX,
-    timePeriod: 'd1',
-    sortBy: 'date',
-    language: 'lang_en',
-    searchCountry: 'us',
+    timePeriod: "d1",
+    sortBy: "date",
+    language: "lang_en",
+    searchCountry: "us",
     blockList,
   };
 }

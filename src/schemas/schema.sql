@@ -4,6 +4,7 @@ CREATE TABLE
     link TEXT NOT NULL UNIQUE,
     parse_status TEXT DEFAULT 'pending',
     title TEXT,
+    locale TEXT DEFAULT NULL,
     excerpt TEXT,
     site_name TEXT,
     text_content TEXT,
