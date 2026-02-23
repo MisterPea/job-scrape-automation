@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default function writeCsv(fileName: string, records: Array<Object>) {
-  const csvFile = path.resolve(__dirname, `logging/${fileName}`);
+  const csvFile = path.resolve(__dirname, `../logging/${fileName}`);
 
   const writeHeaders =
     !fs.existsSync(csvFile) || fs.statSync(csvFile).size === 0;

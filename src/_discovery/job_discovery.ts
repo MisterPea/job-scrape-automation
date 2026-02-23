@@ -1,9 +1,10 @@
-import { AppConfig } from "./config";
+import { AppConfig } from "../config";
 import axios from "axios";
-import { SanitizedSearchResult } from "./types";
-import writeCsv from "./csvControl";
-import currentDatetime from "./helpers/getDate";
-import { TitleGroup } from "./data/searchData";
+import { SanitizedSearchResult } from "./types.discovery";
+import writeCsv from "../scripts/csvControl";
+import currentDatetime from "../scripts/getDate";
+import { TitleGroup } from "./job_discovery.terms";
+import { prepareObjectsForInsert } from "../scripts/prepareObjForInsert";
 
 export class Search {
   queue: Array<{ retries: number; url: string, searchTerm: string; }> = [];
@@ -43,7 +44,7 @@ export class Search {
 
     // Write to sqlite
     console.info(`Preparing search results`);
-    const { keys, vals } = this.db.prepareObjectsForInsert(this.searchReturnItems);
+    const { keys, vals } = prepareObjectsForInsert(this.searchReturnItems);
 
     if (!vals.length) {
       console.info('No search results');
@@ -179,5 +180,4 @@ export class Search {
     return;
   }
 }
-
 

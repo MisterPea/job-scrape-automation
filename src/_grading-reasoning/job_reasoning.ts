@@ -1,7 +1,7 @@
 import OpenAI from "openai";
-import { prompts } from "./data/prompts";
-import { embedTexts } from "./vectorEmbeddings";
-import { DeepCompareOutput } from "./types";
+import { prompts } from "./job_reasoning-prompts";
+import { embedTexts } from "../_grading-embed/vectorEmbeddings";
+import { DeepCompareOutput } from "../types";
 
 export class ReasoningModel {
   client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

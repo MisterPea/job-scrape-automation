@@ -18,12 +18,6 @@ export interface SearchResult {
   pagemap?: Pagemap;
 }
 
-export interface SanitizedSearchResult {
-  title: string,
-  link: string,
-  snippet?: string,
-}
-
 export type ChunkMatch = {
   jobIndex: number;
   resumeIndex: number;
