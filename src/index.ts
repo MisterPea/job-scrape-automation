@@ -1,18 +1,29 @@
 import { loadConfig } from "./config";
-import { Search } from "./runSearch";
-import { TITLE_GROUPS } from "./data/searchData";
-import { DB } from "./db/DB";
-import { JobDataRetrieval } from './runJobDataRetrieval';
-import { ResumeJobClassifier } from "./runGrading";
+import { Search } from "./_discovery/job_discovery";
+import { TITLE_GROUPS } from "./_discovery/job_discovery.terms";
+import { DB, type DbConfig } from '@misterpea/sqlite-worker-db';
+import { JobDataRetrieval } from './_discovery-parsing/runJobDataRetrieval';
+import { ResumeJobClassifier } from "./_grading-embed/job_grading";
 import { resumeText } from "./data/resumeText";
-import { ReasoningModel } from './reasoningModelTasking';
+import { ReasoningModel } from './_grading-reasoning/job_reasoning';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const dbConfig: DbConfig = {
+  schemaPath: path.join(__dirname, './schemas/schema.sql'),
+  dbPath: path.join(__dirname, '../sqlite/jobs.db')
+};
+
 
 /**
  * Main function block to handle the main flow of acquisition and grading of jobs
  */
 async function main() {
   const config = loadConfig();
-  const db = new DB();
+  const db = new DB(dbConfig);
   const s = new Search(config, db);
   const jdr = new JobDataRetrieval(db);
   const rjc = new ResumeJobClassifier(db);
@@ -40,7 +51,7 @@ async function main() {
  * Set embedding for resume
  */
 async function embedResume() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   const rjc = new ResumeJobClassifier(db);
   const rm = new ReasoningModel(db);
   await rjc.embedResume(resumeText.resumeChunk);
@@ -51,7 +62,7 @@ async function embedResume() {
  * Hard reset of all is_graded within parsed_jobs
  */
 async function resetGrade() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     UPDATE parsed_jobs
     SET is_graded_whole='not_graded', is_graded_summary='not_graded' `, []);
@@ -61,7 +72,7 @@ async function resetGrade() {
  * Hard reset of all deep_comparison within candidate_jobs
  */
 async function resetDeepCompare() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     UPDATE candidate_jobs
     SET deep_comparison = 'pending'`, []);
@@ -71,7 +82,7 @@ async function resetDeepCompare() {
  * If parsing of discovered jobs fails mid-progress, use to restart
  */
 async function resetRunningDiscoverdJobs() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     UPDATE discovered_jobs
     SET parse_status='pending'
@@ -83,7 +94,7 @@ async function resetRunningDiscoverdJobs() {
  * If grading fails mid-progress, use to restart
  */
 async function reRunStalledGrading() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   const rjc = new ResumeJobClassifier(db);
   await db.setData(`
       UPDATE parsed_jobs
@@ -98,7 +109,7 @@ async function reRunStalledGrading() {
  * (Might not be needed with new discovery error handling)
  */
 async function resetFailedDiscovered() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     UPDATE discovered_jobs
     SET parse_status='pending'
@@ -111,7 +122,7 @@ async function resetFailedDiscovered() {
  * ** Don't use - for testing only **
  */
 async function eraseDiscoveredJobs() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     DROP TABLE discovered_jobs`, []);
   console.log('discovered_jobs deleted');
@@ -122,7 +133,7 @@ async function eraseDiscoveredJobs() {
  * ** Don't use - for testing only **
  */
 async function eraseCandidateJobs() {
-  const db = new DB();
+  const db = new DB(dbConfig);
   await db.setData(`
     DROP TABLE candidate_jobs`, []);
   console.log('candidate_jobs deleted');

@@ -1,6 +1,6 @@
-import { cosineSimilarity, embedTexts } from './vectorEmbeddings';
-import { ChunkMatch } from './types';
-import { ResumeChunkElement } from './data/resumeText';
+import { cosineSimilarity, embedTexts } from '../_grading-embed/vectorEmbeddings';
+import { ChunkMatch } from '../types';
+import { ResumeChunkElement } from '../data/resumeText';
 
 export class ResumeJobClassifier {
   classifier: any;
@@ -287,7 +287,7 @@ export class ResumeJobClassifier {
       console.info('No candidates found');
       return;
     }
-    
+
     candidateResults.forEach(async ({ id, link }: { id: number, link: string; }) => {
       await this.db.insertData(`
         INSERT INTO candidate_jobs (link)
@@ -303,7 +303,5 @@ export class ResumeJobClassifier {
         `, [id, link]);
       console.info('Record added to candidate_jobs');
     });
-
-
   }
 }

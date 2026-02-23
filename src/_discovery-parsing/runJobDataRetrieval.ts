@@ -1,6 +1,6 @@
-import currentDatetime from './helpers/getDate';
-import writeCsv from './csvControl';
-import { parseWithTimeout } from './parser/parseController';
+import currentDatetime from '../scripts/getDate';
+import writeCsv from '../scripts/csvControl';
+import { parseWithTimeout } from './parseController';
 import { VirtualBrowser } from "./VirtualBrowser";
 
 interface ResultWithArticle {
@@ -52,7 +52,7 @@ export class JobDataRetrieval {
     try {
       console.info(`Page fetch - Visiting: ${link}`);
       const { main } = await vb.getPage(link);
-      if (!main) throw new Error('Error: No data returned from page visit')
+      if (!main) throw new Error('Error: No data returned from page visit');
 
       console.info(`Page fetch - Parsing: ${link}`);
       // Parse on thread to allow exit if processing takes too long.
